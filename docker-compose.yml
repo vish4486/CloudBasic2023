@@ -1,0 +1,61 @@
+version: '3'
+
+services:
+  nextcloud:
+    image: nextcloud
+    ports:
+      - "8080:80"
+    volumes:
+      - nextcloud_data:/var/www/html
+    environment:
+      - MYSQL_PASSWORD=admin
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=admin
+      - MYSQL_HOST=db
+      - NEXTCLOUD_ADMIN_USER=admin
+      - NEXTCLOUD_ADMIN_PASSWORD=admin123
+      - NEXTCLOUD_TABLE_PREFIX=oc_
+    networks:
+      - nextcloud_network
+
+  db:
+    image: mariadb
+    environment:
+      - MYSQL_ROOT_PASSWORD=admin
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=admin
+      - MYSQL_PASSWORD=admin
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./mariadb-init:/docker-entrypoint-initdb.d
+    networks:
+      - nextcloud_network
+
+  locust:
+    image: locustio/locust
+    ports:
+      - "8089:8089"
+    volumes:
+      - ./locust:/mnt/locust
+    command: -f /mnt/locust/locustfile.py --host http://nextcloud
+    networks:
+      - nextcloud_network
+    depends_on:
+      - nextcloud
+
+  cleanup:
+    image: alpine
+    volumes:
+      - nextcloud_data:/var/www/html
+      - ./cleanup.sh:/usr/local/bin/cleanup.sh
+    entrypoint: ["sh", "-c", "while true; do /usr/local/bin/cleanup.sh; sleep 3600; done"] # Run every hour
+    networks:
+      - nextcloud_network
+
+networks:
+  nextcloud_network:
+
+volumes:
+  nextcloud_data:
+  db_data:
+
