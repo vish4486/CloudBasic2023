@@ -1,5 +1,6 @@
 import os
 import random
+import time
 from locust import HttpUser, task, between
 from requests.auth import HTTPBasicAuth
 
@@ -20,12 +21,18 @@ class NextcloudUser(HttpUser):
 
     @task
     def upload_big(self):
-        filename = "testfile_1kb"
+        filename = "testfile_5mb"
         file_path = '/mnt/locust/' + filename  # Assuming test files are in this path
 
         with open(file_path, 'rb') as f:
-            response = self.client.put(f"/remote.php/dav/files/{self.user_name}/{filename}",
-                                       auth=self.auth, data=f, name=f"/remote.php/dav/files/{self.user_name}/testfile_1kb")
+            retries = 3
+            for _ in range(retries):
+                response = self.client.put(f"/remote.php/dav/files/{self.user_name}/{filename}",
+                                           auth=self.auth, data=f, name=f"/remote.php/dav/files/{self.user_name}/testfile_5mb")
+                if response.status_code == 423:
+                    time.sleep(2)  # wait for 2 seconds before retrying
+                else:
+                    break
             print(f"Upload response for {self.user_name}: {response.status_code}")
 
         if response.status_code not in [201, 204]:
@@ -35,10 +42,15 @@ class NextcloudUser(HttpUser):
 
         for i in range(0, 5):
             response = self.client.get(f"/remote.php/dav/files/{self.user_name}/{filename}",
-                                       auth=self.auth, name=f"/remote.php/dav/files/{self.user_name}/testfile_1kb")
+                                       auth=self.auth, name=f"/remote.php/dav/files/{self.user_name}/testfile_5mb")
             print(f"Download response for {self.user_name}: {response.status_code}")
+            if response.status_code == 404:
+                print(f"File not found for user {self.user_name}")
+                return
 
         response = self.client.delete(f"/remote.php/dav/files/{self.user_name}/{filename}",
-                                      auth=self.auth, name=f"/remote.php/dav/files/{self.user_name}/testfile_1kb")
+                                      auth=self.auth, name=f"/remote.php/dav/files/{self.user_name}/testfile_5mb")
         print(f"Delete response for {self.user_name}: {response.status_code}")
+        if response.status_code == 404:
+            print(f"File not found for user {self.user_name}")
 
